@@ -1,65 +1,153 @@
 #include <Arduino.h>
-
 #include <esp32_smartdisplay.h>
 #include <ui/ui.h>
-#include <ui/screens.h>
+#include <lvglDriver.h>
 
-extern "C" void action_on_rotate(lv_event_t *e)
+#include <firebase_handler.h>
+#define DEBUG 1
+
+FirebaseHandler firebase;
+
+static const char *TAG = "APP_MAIN";
+
+static TaskHandle_t lvgl_task_handle = NULL;
+static TaskHandle_t firebase_task_handle = NULL;
+
+// Declare a binary semaphore
+static SemaphoreHandle_t display_init_semaphore;
+
+void firebase_task(void *parameter)
+{ // Initialize the FirebaseHandler
+  // Wait indefinitely until the display initialization is complete
+  if (xSemaphoreTake(display_init_semaphore, portMAX_DELAY) != pdTRUE)
+  {
+    ESP_LOGE(TAG, "Failed to take display init semaphore in lvgl_task");
+    // Handle error or restart task/system as appropriate
+    vTaskDelete(NULL); // Delete this task if it can't proceed
+  }
+  ESP_LOGI(TAG, "LVGL task started after display init.");
+
+  firebase.wifi_init();
+
+  FirebaseJson content;
+
+  content.set("fields/playlist/booleanValue", true);
+
+  // FirebaseJson albumContent;
+
+  // String docId = "4aawyAB9vmqN6y0c6n7koi";
+
+  // String albumDocPath = "process_album_art/" + docId;
+
+  // albumContent.set("fields/imageUrl/stringValue", "https://i.scdn.co/image/ab67616d00001e022c5b24ecfa39523a75c993c4");
+  // albumContent.set("fields/trackId/stringValue", "4aawyAB9vmqN6y0c6n7koi");
+
+  firebase.firestoreSet("commands/fetch_saved_playlists", content);
+  // vTaskDelay(1500 / portTICK_PERIOD_MS);
+  // firebase.firestoreSet(albumDocPath.c_str(), albumContent);
+  vTaskDelay(1500 / portTICK_PERIOD_MS);
+
+  // smartdisplay_lcd_set_backlight(0); // Set backlight to 50%
+  // firebase.getAlbumArt("4aawyAB9vmqN6y0c6n7koi");
+  // smartdisplay_lcd_set_backlight(1); // Set backlight to 50%
+
+  for (;;)
+  {
+    firebase.firebase_loop();
+    // Delay to prevent flooding the Firebase server with requests
+    // Adjust the delay as needed for your application
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
+  }
+}
+
+void lvgl_task(void *parameter)
 {
-    auto disp = lv_disp_get_default();
-    auto rotation = (lv_display_rotation_t)((lv_disp_get_rotation(disp) + 1) % (LV_DISPLAY_ROTATION_270 + 1));
-    lv_display_set_rotation(disp, rotation);
+  ulong next_millis;
+  auto lv_last_tick = millis();
+
+  for (;;)
+  {
+    auto const now = millis();
+
+    lv_tick_inc(now - lv_last_tick);
+    lv_last_tick = now;
+
+    lv_timer_handler();
+    vTaskDelay(5 / portTICK_PERIOD_MS);
+  }
 }
 
 void setup()
 {
-#ifdef ARDUINO_USB_CDC_ON_BOOT
-    delay(5000);
-#endif
-    Serial.begin(115200);
-    Serial.setDebugOutput(true);
-    log_i("Board: %s", BOARD_NAME);
-    log_i("CPU: %s rev%d, CPU Freq: %d Mhz, %d core(s)", ESP.getChipModel(), ESP.getChipRevision(), getCpuFrequencyMhz(), ESP.getChipCores());
-    log_i("Free heap: %d bytes", ESP.getFreeHeap());
-    log_i("Free PSRAM: %d bytes", ESP.getPsramSize());
-    log_i("SDK version: %s", ESP.getSdkVersion());
+  Serial.begin(115200);
 
-    smartdisplay_init();
+  while (!Serial)
+  {
+    delay(100);
+  }
 
-    __attribute__((unused)) auto disp = lv_disp_get_default();
-    // lv_disp_set_rotation(disp, LV_DISP_ROT_90);
-    // lv_disp_set_rotation(disp, LV_DISP_ROT_180);
-    // lv_disp_set_rotation(disp, LV_DISP_ROT_270);
+  display_init_semaphore = xSemaphoreCreateBinary();
+  if (display_init_semaphore == NULL)
+  {
+    ESP_LOGE(TAG, "Failed to create display init semaphore");
+    while (1)
+    {
+      vTaskDelay(1);
+    }
+  }
 
-    ui_init();
+  smartdisplay_init();
 
-    // To use third party libraries, enable the define in lv_conf.h: #define LV_USE_QRCODE 1
-    auto ui_qrcode = lv_qrcode_create(objects.main);
-    lv_qrcode_set_size(ui_qrcode, 100);
-    lv_qrcode_set_dark_color(ui_qrcode, lv_color_black());
-    lv_qrcode_set_light_color(ui_qrcode, lv_color_white());
-    const char *qr_data = "https://github.com/rzeldent/esp32-smartdisplay";
-    lv_qrcode_update(ui_qrcode, qr_data, strlen(qr_data));
-    lv_obj_center(ui_qrcode);
+  xSemaphoreGive(display_init_semaphore);
+
+  __attribute__((unused)) auto disp = lv_disp_get_default();
+  lv_disp_set_rotation(disp, LV_DISP_ROTATION_0);
+
+  init_lvgl_littlefs_driver();
+
+  delay(5000); // Wait for the display to stabilize
+  ui_init();
+  
+  xTaskCreatePinnedToCore(
+      lvgl_task,         // Function that should be called
+      "LVGL_Task",       // Name of the task (for debugging)
+      32000,             // Stack size (bytes)
+      NULL,              // Parameter to pass
+      5,                 // Task priority
+      &lvgl_task_handle, // Task handle
+      1                  // Core ID (0 for core 0, 1 for core 1)
+  );
+
+  if (lvgl_task_handle == NULL)
+  {
+    ESP_LOGE(TAG, "Failed to create LVGL task");
+    while (1)
+    {
+      vTaskDelay(1);
+    }
+  }
+
+  xTaskCreatePinnedToCore(
+      firebase_task,         // Function that should be called
+      "firebase_task",       // Name of the task (for debugging)
+      10240,                 // Stack size (bytes)
+      NULL,                  // Parameter to pass
+      1,                     // Task priority
+      &firebase_task_handle, // Task handle
+      0                      // Core ID (0 for core 0, 1 for core 1)
+  );
+
+  if (firebase_task_handle == NULL)
+  {
+    ESP_LOGE(TAG, "Failed to create LVGL task");
+    while (1)
+    {
+      vTaskDelay(1);
+    }
+  }
 }
-
-ulong next_millis;
-auto lv_last_tick = millis();
 
 void loop()
 {
-    auto const now = millis();
-    if (now > next_millis)
-    {
-        next_millis = now + 500;
-
-         char text_buffer[32];
-        sprintf(text_buffer, "%lu", now);
-        lv_label_set_text(objects.milliseconds_value, text_buffer);
-    }
-    // Update the ticker
-    lv_tick_inc(now - lv_last_tick);
-    lv_last_tick = now;
-    // Update the UI
-    lv_timer_handler();
+  vTaskDelay(1000 / portTICK_PERIOD_MS); // Prevent watchdog timeout
 }

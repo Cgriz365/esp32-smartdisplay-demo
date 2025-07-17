@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify API Setup</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        #message {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border-color: #f5c6cb;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Spotify API Setup</h1>
+    <p>Please enter your Spotify Client ID and Client Secret below. You can find these by creating an application in
+        your <a href="https://developer.spotify.com/dashboard/applications" target="_blank">Spotify Developer
+            Dashboard</a>.</p>
+    <form id="spotifySetupForm">
+        <label for="clientId">Spotify Client ID:</label>
+        <input type="text" id="clientId" name="clientId" required>
+
+        <label for="clientSecret">Spotify Client Secret:</label>
+        <input type="text" id="clientSecret" name="clientSecret" required>
+
+        <button type="submit">Save Credentials</button>
+    </form>
+    <div id="message"></div>
+
+    <script>
+        document.getElementById('spotifySetupForm').addEventListener('submit', async function (event) {
+            event.preventDefault(); // Prevent default form submission
+
+            const clientId = document.getElementById('clientId').value;
+            const clientSecret = document.getElementById('clientSecret').value;
+            const messageDiv = document.getElementById('message');
+
+            messageDiv.textContent = 'Saving...';
+            messageDiv.className = ''; // Clear previous classes
+
+            const functionUrl = 'https://setspotifycredentials-pxaqsveupq-uc.a.run.app/setSpotifyCredentials'; // Replace with your actual URL
+
+            try {
+                const response = await fetch(functionUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ clientId, clientSecret })
+                });
+
+                const text = await response.text();
+
+                if (response.ok) {
+                    messageDiv.textContent = 'Credentials saved successfully! Redirecting to Spotify login...';
+                    messageDiv.classList.add('success');
+                    // --- ADD THIS LINE FOR REDIRECTION ---
+                    // Replace 'YOUR_FIREBASE_FUNCTION_URL_HERE/spotifyLogin' with the actual URL
+                    // of your deployed spotifyLogin function.
+                    window.location.href = 'https://spotifylogin-pxaqsveupq-uc.a.run.app/spotifyLogin';
+                } else {
+                    messageDiv.textContent = `Error: ${text || 'Unknown error'}`;
+                    messageDiv.classList.add('error');
+                }
+            } catch (error) {
+                messageDiv.textContent = `Network error: ${error.message}`;
+                messageDiv.classList.add('error');
+            }
+        });
+    </script>
+</body>
+
+</html>
