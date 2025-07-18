@@ -27,7 +27,8 @@ extern "C" {
 
 ///////////////////// SCREENS ////////////////////
 
-#include "ui_Screen1.h"
+#include "ui_songScreen.h"
+#include "ui_albumScreen.h"
 
 ///////////////////// VARIABLES ////////////////////
 
@@ -38,10 +39,20 @@ extern lv_obj_t * ui____initial_actions0;
 
 // IMAGES AND IMAGE SETS
 LV_IMG_DECLARE(ui_img_1559207837);    // assets/jelly_bean-android-abstract-wallpaper-800x480.png
+LV_IMG_DECLARE(ui_img_playing_png);    // assets/playing.png
+LV_IMG_DECLARE(ui_img_home_png);    // assets/home.png
+LV_IMG_DECLARE(ui_img_library_png);    // assets/library.png
+LV_IMG_DECLARE(ui_img_albums_png);    // assets/albums.png
+LV_IMG_DECLARE(ui_img_artist_png);    // assets/artist.png
+LV_IMG_DECLARE(ui_img_playlist_png);    // assets/playlist.png
+LV_IMG_DECLARE(ui_img_settings_png);    // assets/settings.png
+LV_IMG_DECLARE(ui_img_pause_png);    // assets/pause.png
 
 // FONTS
 LV_FONT_DECLARE(ui_font_Inter28Medium);
 LV_FONT_DECLARE(ui_font_Inter30Medium);
+LV_FONT_DECLARE(ui_font_inter16);
+LV_FONT_DECLARE(ui_font_inter162);
 
 // UI INIT
 void ui_init(void);
